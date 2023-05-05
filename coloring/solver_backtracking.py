@@ -3,6 +3,7 @@
 import networkx as nx
 import time
 import sys
+from collections import namedtuple
 def brute_dfs (n, edge, cur_color, color_num):
     if n == 0: return True
     select_color = set(range(1, color_num + 1))
@@ -92,11 +93,18 @@ def del_color (edge, cur_color, neighbor_color, color, node, color_cnt):
             del neighbor_color[e][color]
 
 count = 0
+total = 0
 Vertex = namedtuple("Vertex", ['i', 'len'])
-def magic_dfs (d, n, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
-    global count
+def magic_dfs (d, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
+    global count, total
     count += 1
-    if count * n > 2000000000: return False
+    total += 1
+    if count * n > 200000000: return False
+    if last_pos <= 10:
+        total = 0
+    else:
+        if total > 5000:
+            return False
     if d == n + 1: return True
     #print(cur_color)
     for i in range(1, n + 1):
@@ -108,18 +116,19 @@ def magic_dfs (d, n, edge, cur_color, color_num, neighbor_color, color_cnt, last
                 if color not in neighbor_color[i]:
                     choose_color = color
                     break
-            add_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt, last_pos)
-            if magic_dfs(d + 1, n, edge, cur_color, color_num, neighbor_color, color_cnt):
+            add_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt)
+            if magic_dfs(d + 1, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
                 return True
-            del_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt, last_pos)
+            del_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt)
             return False
-
     now = last_pos + 1
-    while cur_color[now]: now += 1
+    while cur_color[node[now].i]: now += 1
+    last_pos = now
+    now = node[now].i
     for i in range(1, color_num + 1):
         if i in neighbor_color[now]: continue
         add_color(edge, cur_color, neighbor_color, i, now, color_cnt)
-        if magic_dfs(d + 1, n, edge, cur_color, color_num, neighbor_color, color_cnt, now):
+        if magic_dfs(d + 1, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
             return True
         del_color(edge, cur_color, neighbor_color, i, now, color_cnt)
         if color_cnt[i] == 0: return False
@@ -131,7 +140,8 @@ def magic_force (edge, n, m):
     node = []
     for i in range(1, n + 1):
         node.append(Vertex(i, len(edge[i])))
-    sorted(node, key = lambda x: -len[x])
+    node = sorted(node, key = lambda x: -x.len)
+
     node = [0] + node
     while l < r:
         mid = (l + r) // 2
@@ -141,7 +151,7 @@ def magic_force (edge, n, m):
         neighbor_color = [dict() for i in range(n + 1)]
         color_cnt = [0 for i in range(mid + 1)]
         #print(mid)
-        if magic_dfs(1, n, edge, cur_color, mid, neighbor_color, color_cnt, 1):
+        if magic_dfs(1, n, node, edge, cur_color, mid, neighbor_color, color_cnt, 0):
             r = mid
             ans_color = cur_color[1:].copy()
             for i in range(n): ans_color[i] -= 1
