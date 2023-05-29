@@ -4,224 +4,94 @@ import networkx as nx
 import time
 import sys
 from collections import namedtuple
-def brute_dfs (n, edge, cur_color, color_num):
-    if n == 0: return True
-    select_color = set(range(1, color_num + 1))
-    for e in edge[n]:
-        if cur_color[e] > 0 and cur_color[e] in select_color:
-            select_color.remove(cur_color[e])
-    #print(cur_color, n, select_color)
-    for i in select_color:
-        cur_color[n] = i
-        flag = brute_dfs(n - 1, edge, cur_color, color_num)
-        if flag: return True
-        cur_color[n] = 0
-    return False
-
-def brute_force (edge, n, m):
-    l, r = 1, n
-    ans_color = []
-    while l < r:
-        mid = (l + r) // 2
-        cur_color = [0 for i in range(n + 1)]
-        if brute_dfs(n, edge, cur_color, mid):
-            r = mid
-            ans_color = cur_color[1:].copy()
-            for i in range(n): ans_color[i] -= 1
-        else:
-            l = mid + 1
-    return r, ans_color
-
-def trick_dfs (d, n, edge, cur_color, color_num, neighbor_color):
-    if d == n + 1: return True
-    max_len = -1
-    for i in range(1, n + 1):
-        if cur_color[i]: continue
-        if len(neighbor_color[i]) > max_len:
-            max_len = len(neighbor_color[i])
-            max_pos = i
-    for i in range(1, color_num + 1):
-        if i in neighbor_color[max_pos]: continue
-        cur_color[max_pos] = i
-        for e in edge[max_pos]:
-            if i in neighbor_color[e]:
-                neighbor_color[e][i] += 1
-            else:
-                neighbor_color[e][i] = 1
-        flag = dfs(d + 1, n, edge, cur_color, color_num, neighbor_color)
-        if flag: return True
-        for e in edge[max_pos]:
-            if neighbor_color[e][i] > 1:
-                neighbor_color[e][i] -= 1
-            else:
-                del neighbor_color[e][i]
-
-        cur_color[max_pos] = 0
-    return False
-
-def trick_force (edge, n, m):
-    l, r = 1, n
-    ans_color = []
-    while l < r:
-        mid = (l + r) // 2
-        cur_color = [0 for i in range(n + 1)]
-        neighbor_color = [dict() for i in range(n + 1)]
-        if dfs(1, n, edge, cur_color, mid, neighbor_color):
-            r = mid
-            ans_color = cur_color[1:].copy()
-            for i in range(n): ans_color[i] -= 1
-        else:
-            l = mid + 1
-    return r, ans_color
-
-def add_color (edge, cur_color, neighbor_color, color, node, color_cnt):
-    color_cnt[color] += 1
-    cur_color[node] = color
-    for e in edge[node]:
-        if color in neighbor_color[e]:
-            neighbor_color[e][color] += 1
-        else:
-            neighbor_color[e][color] = 1
-
-def del_color (edge, cur_color, neighbor_color, color, node, color_cnt):
-    color_cnt[color] -= 1
-    cur_color[node] = 0
-    for e in edge[node]:
-        if neighbor_color[e][color] > 1:
-            neighbor_color[e][color] -= 1
-        else:
-            del neighbor_color[e][color]
+from z3 import *
+from random import sample
 
 count = 0
 total = 0
 Vertex = namedtuple("Vertex", ['i', 'len'])
-def magic_dfs (d, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
-    global count, total
-    count += 1
-    total += 1
-    if count * n > 200000000: return False
-    if last_pos <= 10:
-        total = 0
-    else:
-        if total > 5000:
-            return False
-    if d == n + 1: return True
-    #print(cur_color)
+
+def check (lamb, k, n):
+    T = set()
+    c = [0] * (n + 1)
     for i in range(1, n + 1):
-        if cur_color[i]: continue
-        if len(neighbor_color[i]) == color_num: # No color to choose for this node
-            return False
-        if len(neighbor_color[i]) == color_num - 1: # One color to choose for this node
-            for color in range(1, color_num + 1):
-                if color not in neighbor_color[i]:
-                    choose_color = color
-                    break
-            add_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt)
-            if magic_dfs(d + 1, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
-                return True
-            del_color(edge, cur_color, neighbor_color, choose_color, i, color_cnt)
-            return False
-    now = last_pos + 1
-    while cur_color[node[now].i]: now += 1
-    last_pos = now
-    now = node[now].i
-    for i in range(1, color_num + 1):
-        if i in neighbor_color[now]: continue
-        add_color(edge, cur_color, neighbor_color, i, now, color_cnt)
-        if magic_dfs(d + 1, n, node, edge, cur_color, color_num, neighbor_color, color_cnt, last_pos):
-            return True
-        del_color(edge, cur_color, neighbor_color, i, now, color_cnt)
-        if color_cnt[i] == 0: return False
-    return False
-
-def magic_force (edge, n, m):
-    l, r = 1, n
-    ans_color = []
-    node = []
-    for i in range(1, n + 1):
-        node.append(Vertex(i, len(edge[i])))
-    node = sorted(node, key = lambda x: -x.len)
-
-    node = [0] + node
-    while l < r:
-        mid = (l + r) // 2
-        global count
-        count = 0
-        cur_color = [0 for i in range(n + 1)]
-        neighbor_color = [dict() for i in range(n + 1)]
-        color_cnt = [0 for i in range(mid + 1)]
-        #print(mid)
-        if magic_dfs(1, n, node, edge, cur_color, mid, neighbor_color, color_cnt, 0):
-            r = mid
-            ans_color = cur_color[1:].copy()
-            for i in range(n): ans_color[i] -= 1
-        else:
-            l = mid + 1
-    return r, ans_color
-
-
-from random import sample
-from pysat.formula import CNF
-from pysat.solvers import Solver
-def sat_build (edge_set, n, k):
-    sat = []
-    var_num = 1  # t variables codes a vertex
-    while (1 << var_num) < k: var_num += 1
-    for i in range(1, n + 1):
-        for state in range(k, 1 << var_num):
-            clause = []
-            first_varible = (i - 1) * var_num + 1  # the first varible index of i-th vertex
-            for j in range(0, var_num):
-                if (state >> j) & 1:
-                    clause.append(-(first_varible + j))
+        c[i] = set(range(1, k + 1))
+    for u in range(1, n + 1):
+        if len(c[u]) > 0:
+            i = list(c[u])[0]
+            c[u] = set([i])
+            for v in range(u + 1, n + 1):
+                if (u, v, 0) in lamb:
+                    c[v] = c[v] - c[u]
+                    if len(c[v]) == 0:
+                        for w in range(1, u):
+                            if (w, v, 1) in lamb and c[w] == c[u]:
+                                T.add((w, u, v))
                 else:
-                    clause.append(first_varible + j)
-            sat.append(clause)
-    for edge in edge_set:
-        for state in range(0, k):
-            clause = []
-            for i in edge:
-                first_varible = (i - 1) * var_num + 1
-                for j in range(0, var_num):
-                    if (state >> j) & 1:
-                        clause.append(-(first_varible + j))
-                    else:
-                        clause.append(first_varible + j)
-            sat.append(clause)
-    return sat, var_num
+                    c[v] = set([i]) if i in c[v] else set()
+                    if len(c[v]) == 0:
+                        for w in range(1, u):
+                            if (w, v, 1) in lamb and c[w] != c[u] or (w, v, 0) in lamb and c[w] == c[u]:
+                                T.add((w, u, v))
+
+    return T
+
+
+def sat_build (edge_set, node_num, col_num, T, lamb):
+    sat = []
+    literals = []
+    var_num = 0
+
+    k = col_num
+    for (i, j) in edge_set:
+        lamb.add((i, j, 0))
+    #while 1:
+    #    T = check(lamb, k, node_num)
+    #    if len(T) == 0:
+    #        break
+    #    for (u, v, w) in T:
+    #        lamb.add((u, v, 0))
+    #        lamb.add((u, w, 0))
+    #        lamb.add((u, w, 1))
+    #        lamb.add((v, w, 0))
+    #        lamb.add((v, w, 1))
+    #print(len(lamb))
+    for i in range(1, node_num + 1):
+        for j in range(i + 1, node_num + 1):
+            literals.append(Bool(f"s{i, j}"))
+            var_num += 1
+
+            if (i, j) in edge_set:
+                sat.append([Not(Bool(f"s{i, j}"))])
+            for k in range(j + 1, node_num + 1):
+                if (i, j, 0) in lamb and (i, k, 0) in lamb and (j, k, 1) in lamb:
+                    sat.append([Not(Bool(f"s{i, j}")), Not(Bool(f"s{i, k}")), Bool(f"s{j, k}")])
+                if (i, j, 0) in lamb and (j, k, 0) in lamb and (i, k, 1) in lamb:
+                    sat.append([Not(Bool(f"s{i, j}")), Not(Bool(f"s{j, k}")), Bool(f"s{i, k}")])
+    return sat, literals, var_num
 
 def sat_check (n, k, edge_set):
-    sat_instance, var_num = sat_build(edge_set, n, k);
-    answer = []
-    cnf = CNF(from_clauses=sat_instance)
-    with Solver(bootstrap_with=cnf) as solver:
-        return solver.solve()
-    '''
-    for i in range(1, n + 1):
-        color = 0
-        for j in range(0, var_num):
-            result = answer[(i - 1) * var_num + j]
-            if result > 0:
-                color += 1 << j
-        print("%d-th vertex is %d-th color" % (i, color))
-    '''
-def sat_print (n, k, edge_set):
-    sat_instance, var_num = sat_build(edge_set, n, k);
-    answer = []
-    cnf = CNF(from_clauses=sat_instance)
-    with Solver(bootstrap_with=cnf) as solver:
-        solver.solve()
-        answer = solver.get_model()
-    ans = []
-    for i in range(1, n + 1):
-        color = 0
-        for j in range(0, var_num):
-            result = answer[(i - 1) * var_num + j]
-            if result > 0:
-                color += 1 << j
-        ans.append(color)
-    return ans
+    sat_instance, literals, var_num = sat_build(edge_set, n, k);
+    solver = Optimize()
+    for clause in sat_instance:
+        solver.add(Or([lit for lit in clause]))
+        #print(Or([lit for lit in clause]))
+        #solver.add(Or([literals[abs(lit) - 1] if lit > 0 else Not(literals[abs(lit) - 1]) for lit in clause]))
+    c = [0] * (n + 1)
+    for i in range(2, n + 1):
+        c[i] = And([Not(Bool(f"s{j, i}")) for j in range(1, i)])
+        #print(c[i])
+        #solver.add(c[i])
+    solver.add(Sum([If (c[i], 1, 0) for i in range(2, n + 1)]) <= k - 1)
+    if solver.check() == sat:
+        model = solver.model()
+        print(model)
+        print(([model.evaluate(c[i]) for i in range(2, n + 1)]))
+        print(([model.evaluate(c[i]) for i in range(2, n + 1)]).count(True))
 
+def sat_force (n, edge_set):
+    #ans = {50: 6, 70: 17, 100: 16, 200: 78, 500: 16, 1000: 100}
+    return sat_check(n, 2, edge_set)
 
 def solve_it(input_data):
     # parse the input
@@ -232,8 +102,6 @@ def solve_it(input_data):
     edge_count = int(first_line[1])
     edge = [[] for i in range(node_count + 1)]
     edge_set = []
-    global count
-    count = 0
     for i in range(1, edge_count + 1):
         line = lines[i]
         parts = line.split()
@@ -243,12 +111,8 @@ def solve_it(input_data):
         edge[v].append(u)
         edge_set.append((u, v))
     start_time = time.time()
-    #color_count, solution = brute_force(edge, node_count, edge_count)
-    #color_count, solution = trick_force(edge, node_count, edge_count)
-    color_count, solution = magic_force(edge, node_count, edge_count)
-    #color_count, solution = sat_force(node_count, edge_set)
+    color_count, solution = sat_force(node_count, edge_set)
     end_time = time.time()
-    #print("time:", end_time - start_time)
     output_data = str(color_count) + ' ' + str(1) + '\n'
     output_data += ' '.join(map(str, solution))
 
@@ -264,6 +128,8 @@ if __name__ == '__main__':
         with open(file_location, 'r') as input_data_file:
             input_data = input_data_file.read()
         print(solve_it(input_data))
+        solver.add_soft(c[i], weight=1)
+        solver.add_soft(c[i], weight=1)
     else:
         print('This test requires an input file.  Please select one from the data directory. (i.e. python solver.py ./data/gc_4_1)')
 
