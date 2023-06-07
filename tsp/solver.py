@@ -56,28 +56,56 @@ def inc(x, n):
     if x == n: return 0
     else: return x
 
-def local_search(points, ans, temp, sol, sol_dist):#, vis_time, T):
+def local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
     n = len(points)
     ans = sol.copy()
     ans_dist = sol_dist
-    for x in range(n - 1):
-        for y in range(x + 1, n):
-            #if temp > 0 and vis_time[(x, y)] + 100000 < T: continue
+    for _ in range(100):
+        x = rd.randint(0, n - 1)
+        y = pos[rd.choice(k_neighbor[x])[1]] - 1
+        if y == -1: y = n - 1
+        if x != y:
+            if x > y: x, y = y, x
             length_now = length(points[ans[x]], points[ans[inc(x, n)]]) + length(points[ans[y]], points[ans[inc(y, n)]])
             length_nxt = length(points[ans[x]], points[ans[y]]) + length(points[ans[inc(x, n)]], points[ans[inc(y, n)]])
             delta = -length_now + length_nxt
             if delta < 0:
                 ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
+                for i in range(x + 1, y + 1): pos[ans[i]] = i
                 ans_dist += delta
-                #vis_time[x + 1, y] = T
+
                 if ans_dist < sol_dist:
                     sol = ans.copy()
                     sol_dist = ans_dist
             else:
                 if temp > 0 and rd.random() < math.exp((sol_dist - ans_dist - delta) / temp): # -delta - 1e-5 ?
                     ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
+                    for i in range(x + 1, y + 1): pos[ans[i]] = i
                     ans_dist += delta
-                    #vis_time[x + 1, y] = T
+    return ans, ans_dist, sol, sol_dist
+
+def complete_local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
+    n = len(points)
+    ans = sol.copy()
+    ans_dist = sol_dist
+    x_list = np.random.permutation(n)
+    for x in x_list:  # the fixed order makes local convergence.
+        for (dis, y) in k_neighbor[x]:
+            y = pos[y] - 1
+            if y == -1: y = n - 1
+            if x != y:
+                if x > y: x, y = y, x
+                length_now = length(points[ans[x]], points[ans[inc(x, n)]]) + length(points[ans[y]], points[ans[inc(y, n)]])
+                length_nxt = length(points[ans[x]], points[ans[y]]) + length(points[ans[inc(x, n)]], points[ans[inc(y, n)]])
+                delta = -length_now + length_nxt
+                if delta < 0:
+                    ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
+                    for i in range(x + 1, y + 1): pos[ans[i]] = i
+                    ans_dist += delta
+
+                    if ans_dist < sol_dist:
+                        sol = ans.copy()
+                        sol_dist = ans_dist
 
     return ans, ans_dist, sol, sol_dist
 
@@ -88,27 +116,54 @@ def solve_tsp (points):
     else:
         ans = greedy(points)
     ans_dist = path_dist(points, ans)
+    pos = [0] * n
+    for i in range(n): pos[ans[i]] = int(i)
+    K = 7
+    k_neighbor = [[]] * n
+    for i in range(n):
+        for j in range(n):
+            if i == j: continue
+            k_neighbor[i].append((length(points[i], points[j]), j))
+        k_neighbor[i] = sorted(k_neighbor[i], key = lambda x: x[0])[:K]
+    #print(k_neighbor[1])
     sol = ans.copy()
     sol_dist = ans_dist
     last_ans_dist = 0
-    temp = 3000
-    eps = 1e-5
-    #vis_time = np.zeros((n, n))
-    #for i in range(n):
-    #    for j in range(n):
-    #        vis_time[i][j] = -5e8
-    for T in range(100000):
-        ans, ans_dist, sol, sol_dist = local_search(points, ans, temp, sol, sol_dist)#, vis_time, T)
+    count = 0
+    temperature = 0
+    for i in range(10000):
+        x = rd.randint(0, n - 1)
+        y = rd.randint(0, n - 1)
+        if x != y:
+            temperature += length(points[x], points[y])
+            count += 1
+    temperature /= count
+    temp = temperature
+    eps = 1e-9
+    theta = 1
+    last_reheat_ans_dist = 1e18
+    for T in range(50000):
+        ans, ans_dist, sol, sol_dist = local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos)
+        #print(ans_dist, sol_dist, T, temp)
         temp *= 0.99
+
         if (last_ans_dist - ans_dist < eps and ans_dist - last_ans_dist < eps):
-            temp = 7000
+            temp = temperature * theta
             last_ans = []
-            while 1:
-                ans, ans_dist, sol, sol_dist = local_search(points, ans, 0, sol, sol_dist)#, vis_time, T)
-                if ans == last_ans: break
-                last_ans = ans
+            #while 1:
+            #    cur_ans = ans.copy()
+            #    cur_ans, cur_ans_dist, sol, sol_dist = complete_local_search(points, cur_ans, 0, sol, sol_dist, K, k_neighbor, pos)
+            #    if cur_ans == last_ans: break
+            #    last_ans = cur_ans
             print("HERE")
-            print(ans_dist, sol_dist, T)
+            print(ans_dist, sol_dist, T, temp)
+            if last_reheat_ans_dist - ans_dist < eps and ans_dist - last_reheat_ans_dist < eps:
+                theta = theta * 1.1
+            else:
+                theta = 1
+            last_reheat_ans_dist = ans_dist
+
+            #plot_path(points, ans)
         last_ans_dist = ans_dist
 
     return sol
@@ -142,9 +197,10 @@ def solve_it(input_data):
     obj = length(points[solution[len(points) - 1]], points[solution[0]])
     for index in range(0, nodeCount-1):
         obj += length(points[solution[index]], points[solution[index+1]])
-    #plot_path(points, solution)
+    print(obj)
+    plot_path(points, solution)
     # prepare the solution in the specified output format
-    output_data = '%.2f' % obj + ' ' + str(0) + '\n'
+    output_data = '%.2f' % obj + ' ' + str(points[0][0]) + '\n'
     output_data += ' '.join(map(str, solution))
 
     return output_data
