@@ -15,19 +15,25 @@ import matplotlib.pyplot as plt
 
 def plot_path(points, ans):
     n = len(points)
+
     x_coords = [points[t].x for t in ans]
     y_coords = [points[t].y for t in ans]
+
+    # Add the starting point to complete the loop
     x_coords.append(x_coords[0])
     y_coords.append(y_coords[0])
+
+
     plt.plot(x_coords, y_coords, 'o-')
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.title('Path Plot')
     plt.grid(True)
+    #for i, point in enumerate(points):
+    #    plt.text(point.x, point.y, i, ha='center', va='bottom')
     plt.show()
 
-
-def greedy(points):
+def greedy (points):
     n = len(points)
     vis = np.zeros(n)
     ans = []
@@ -44,42 +50,32 @@ def greedy(points):
         vis[v] = 1
     return ans
 
-def path_dist(points, solution):
+def path_dist (points, solution):
     n = len(points)
     obj = length(points[solution[n - 1]], points[solution[0]])
     for index in range(0, n-1):
         obj += length(points[solution[index]], points[solution[index+1]])
     return obj
 
-def inc(x, n):
-    x += 1
-    if x == n: return 0
-    else: return x
-
-def local_search(points, ans, temp, sol, sol_dist):#, vis_time, T):
+def local_search (points, ans, temp, final_swap, final_delta):
     n = len(points)
-    ans = sol.copy()
-    ans_dist = sol_dist
-    for x in range(n - 1):
-        for y in range(x + 1, n):
-            #if temp > 0 and vis_time[(x, y)] + 100000 < T: continue
-            length_now = length(points[ans[x]], points[ans[inc(x, n)]]) + length(points[ans[y]], points[ans[inc(y, n)]])
-            length_nxt = length(points[ans[x]], points[ans[y]]) + length(points[ans[inc(x, n)]], points[ans[inc(y, n)]])
-            delta = -length_now + length_nxt
-            if delta < 0:
-                ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
-                ans_dist += delta
-                #vis_time[x + 1, y] = T
-                if ans_dist < sol_dist:
-                    sol = ans.copy()
-                    sol_dist = ans_dist
-            else:
-                if temp > 0 and rd.random() < math.exp((sol_dist - ans_dist - delta) / temp): # -delta - 1e-5 ?
-                    ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
-                    ans_dist += delta
-                    #vis_time[x + 1, y] = T
+    x, y = 0, 0
+    final_delta = 0
+    while x == y or x == 0 and y == n - 1:
+        x = rd.randint(0, n - 1)
+        y = rd.randint(0, n - 1)
+    if x > y: x, y = y, x
+    x_left = x - 1 if x > 0 else n - 1
+    y_right = y + 1 if y < n - 1 else 0
+    length_now = length(points[ans[x_left]], points[ans[x]]) + length(points[ans[y]], points[ans[y_right]])
+    length_nxt = length(points[ans[x_left]], points[ans[y]]) + length(points[ans[x]], points[ans[y_right]])
+    delta = -length_now + length_nxt
+    if delta < final_delta:
+        final_delta = delta
+        final_swap = (x, y)
 
-    return ans, ans_dist, sol, sol_dist
+    return final_swap, final_delta
+
 
 def solve_tsp (points):
     n = len(points)
@@ -87,31 +83,16 @@ def solve_tsp (points):
         ans = list(range(0, n))
     else:
         ans = greedy(points)
-    ans_dist = path_dist(points, ans)
-    sol = ans.copy()
-    sol_dist = ans_dist
-    last_ans_dist = 0
-    temp = 3000
-    eps = 1e-5
-    #vis_time = np.zeros((n, n))
-    #for i in range(n):
-    #    for j in range(n):
-    #        vis_time[i][j] = -5e8
-    for T in range(100000):
-        ans, ans_dist, sol, sol_dist = local_search(points, ans, temp, sol, sol_dist)#, vis_time, T)
-        temp *= 0.99
-        if (last_ans_dist - ans_dist < eps and ans_dist - last_ans_dist < eps):
-            temp = 7000
-            last_ans = []
-            while 1:
-                ans, ans_dist, sol, sol_dist = local_search(points, ans, 0, sol, sol_dist)#, vis_time, T)
-                if ans == last_ans: break
-                last_ans = ans
-            print("HERE")
-            print(ans_dist, sol_dist, T)
-        last_ans_dist = ans_dist
-
-    return sol
+    dist = path_dist(points, ans)
+    temp = 300
+    for T in range(500):
+        final_swap, final_delta = (-1, -1), 0
+        for _ in range(100):
+            final_swap, final_delta = local_search(points, ans, temp, final_swap, final_delta)
+        if final_swap[0] > -1:
+            ans[final_swap[0] : final_swap[1] + 1] = ans[final_swap[0] : final_swap[1] + 1][::-1]
+        #print(final_swap, ans, temp)
+    return ans
 
 
 def solve_it(input_data):
@@ -128,23 +109,21 @@ def solve_it(input_data):
         parts = line.split()
         points.append(Point(float(parts[0]), float(parts[1])))
 
-
     # build a trivial solution
     # visit the nodes in the order they appear in the file
-    #solution = list(range(nodeCount))
-    #solution = local_search_tsp(points)
-    solution = solve_tsp(points)
-    #for i in range(10):
-    #    cur_solution = solve_tsp(points)
-    #    if path_dist(points, cur_solution) < path_dist(points, solution):
-    #        solution = cur_solution.copy()
+    solution = list(range(nodeCount))
+    for i in range(10):
+        cur_solution = solve_tsp(points)
+        if path_dist(points, cur_solution) < path_dist(points, solution):
+            solution = cur_solution.copy()
+    plot_path(points, solution)
     # calculate the length of the tour
     obj = length(points[solution[len(points) - 1]], points[solution[0]])
     for index in range(0, nodeCount-1):
         obj += length(points[solution[index]], points[solution[index+1]])
-    #plot_path(points, solution)
+
     # prepare the solution in the specified output format
-    output_data = '%.2f' % obj + ' ' + str(0) + '\n'
+    output_data = '%.2f' % obj + ' ' + str(nodeCount) + '\n'
     output_data += ' '.join(map(str, solution))
 
     return output_data
