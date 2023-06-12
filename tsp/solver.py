@@ -27,21 +27,30 @@ def plot_path(points, ans):
     plt.show()
 
 
-def greedy(points):
+def greedy(points, k_neighbor):
     n = len(points)
     vis = np.zeros(n)
-    ans = []
-    ans.append(0)
-    u = 0
+    u = rd.randint(0, n - 1)
+    ans = [u]
     vis[u] = 1
     for _ in range(n - 1):
-        v = -1
-        for i in range(n):
-            if vis[i] == 1: continue
-            if v == -1 or length(points[v], points[u]) > length(points[i], points[u]):
-                v = i
-        ans.append(v)
-        vis[v] = 1
+        flag = 0
+        for dist, v in k_neighbor[u]:
+            if vis[v] == 1: continue
+            ans.append(v)
+            vis[v] = 1
+            u = v
+            flag = 1
+            break
+        if flag == 0:
+            v = -1
+            for i in range(n):
+                if vis[i] == 1: continue
+                if v == -1 or length(points[i], points[u]) < length(points[v], points[u]):
+                    v = i
+            ans.append(v)
+            vis[v] = 1
+            u = v
     return ans
 
 def path_dist(points, solution):
@@ -58,9 +67,8 @@ def inc(x, n):
 
 def local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
     n = len(points)
-    ans = sol.copy()
-    ans_dist = sol_dist
-    for _ in range(100):
+    ans_dist = path_dist(points, ans)
+    for _ in range(n * 10):
         x = rd.randint(0, n - 1)
         y = pos[rd.choice(k_neighbor[x])[1]] - 1
         if y == -1: y = n - 1
@@ -73,18 +81,17 @@ def local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
                 ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
                 for i in range(x + 1, y + 1): pos[ans[i]] = i
                 ans_dist += delta
-
                 if ans_dist < sol_dist:
                     sol = ans.copy()
                     sol_dist = ans_dist
             else:
-                if temp > 0 and rd.random() < math.exp((sol_dist - ans_dist - delta) / temp): # -delta - 1e-5 ?
+                if rd.random() < math.exp((sol_dist - ans_dist - delta) / temp): # -delta - 1e-5 ?
                     ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
                     for i in range(x + 1, y + 1): pos[ans[i]] = i
                     ans_dist += delta
     return ans, ans_dist, sol, sol_dist
 
-def complete_local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
+def complete_local_search(points, ans, sol, sol_dist, K, k_neighbor, pos):
     n = len(points)
     ans = sol.copy()
     ans_dist = sol_dist
@@ -102,7 +109,6 @@ def complete_local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
                     ans[x + 1 : y + 1] = ans[x + 1 : y + 1][::-1]
                     for i in range(x + 1, y + 1): pos[ans[i]] = i
                     ans_dist += delta
-
                     if ans_dist < sol_dist:
                         sol = ans.copy()
                         sol_dist = ans_dist
@@ -111,14 +117,7 @@ def complete_local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos):
 
 def solve_tsp (points):
     n = len(points)
-    if n > 30000:
-        ans = list(range(0, n))
-    else:
-        ans = greedy(points)
-    ans_dist = path_dist(points, ans)
-    pos = [0] * n
-    for i in range(n): pos[ans[i]] = int(i)
-    K = 7
+    K = 40
     k_neighbor = [[]] * n
     for i in range(n):
         for j in range(n):
@@ -126,45 +125,51 @@ def solve_tsp (points):
             k_neighbor[i].append((length(points[i], points[j]), j))
         k_neighbor[i] = sorted(k_neighbor[i], key = lambda x: x[0])[:K]
     #print(k_neighbor[1])
-    sol = ans.copy()
-    sol_dist = ans_dist
-    last_ans_dist = 0
     count = 0
     temperature = 0
-    for i in range(10000):
+    for i in range(50000):
         x = rd.randint(0, n - 1)
         y = rd.randint(0, n - 1)
         if x != y:
             temperature += length(points[x], points[y])
             count += 1
     temperature /= count
-    temp = temperature
-    eps = 1e-9
-    theta = 1
-    last_reheat_ans_dist = 1e18
-    for T in range(50000):
-        ans, ans_dist, sol, sol_dist = local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos)
-        #print(ans_dist, sol_dist, T, temp)
-        temp *= 0.99
+    sol = greedy(points, k_neighbor)
+    sol_dist = path_dist(points, sol)
+    for i in range(100):
+        ans = greedy(points, k_neighbor)
+        ans_dist = path_dist(points, ans)
+        pos = [0] * n
+        for i in range(n): pos[ans[i]] = int(i)
+        last_ans_dist = 0
+        temp = temperature
+        eps = 1e-9
+        theta = 1
+        last_reheat_ans_dist = 1e18
+        #for T in range(100000):
+            #ans, ans_dist, sol, sol_dist = local_search(points, ans, temp, sol, sol_dist, K, k_neighbor, pos)
+            #print(ans_dist, sol_dist, T, temp)
+            #temp *= 0.9
 
-        if (last_ans_dist - ans_dist < eps and ans_dist - last_ans_dist < eps):
-            temp = temperature * theta
-            last_ans = []
-            #while 1:
-            #    cur_ans = ans.copy()
-            #    cur_ans, cur_ans_dist, sol, sol_dist = complete_local_search(points, cur_ans, 0, sol, sol_dist, K, k_neighbor, pos)
-            #    if cur_ans == last_ans: break
-            #    last_ans = cur_ans
-            print("HERE")
-            print(ans_dist, sol_dist, T, temp)
-            if last_reheat_ans_dist - ans_dist < eps and ans_dist - last_reheat_ans_dist < eps:
-                theta = theta * 1.1
-            else:
-                theta = 1
-            last_reheat_ans_dist = ans_dist
+            #if (last_ans_dist - ans_dist < eps and ans_dist - last_ans_dist < eps):
+                #      temp = temperature * theta
+                #while 1:
+                #    cur_ans = ans.copy()
+                #    cur_ans, cur_ans_dist, sol, sol_dist = complete_local_search(points, cur_ans, 0, sol, sol_dist, K, k_neighbor, pos)
+                #    if cur_ans == last_ans: break
+                #    last_ans = cur_ans
+            #    print("HERE")
+         #       print(ans_dist, sol_dist, T, temp)
+                #if last_reheat_ans_dist - ans_dist < eps and ans_dist - last_reheat_ans_dist < eps:
+                #    theta = theta * 1.1
+                #else:
+                #    theta = 1
+             #   last_reheat_ans_dist = ans_dist
 
-            #plot_path(points, ans)
-        last_ans_dist = ans_dist
+        #    last_ans_dist = ans_dist
+        ans, ans_dist, sol, sol_dist = complete_local_search(points, ans, sol, sol_dist, K, k_neighbor, pos)
+
+        plot_path(points, sol)
 
     return sol
 
