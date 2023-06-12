@@ -11,10 +11,13 @@
 #include<utility>
 #include<map>
 #include<cmath>
+#include<ctime>
+#include<thread>
+#include<chrono>
 using namespace std;
-const double alpha = 1;
+const double alpha = 0.2;
 const double eps = 1e-7;
-const int MAX_ITERATION_TIMES = 10000; 
+const int MAX_ITERATION_TIMES = 100000; 
 struct point{
     double x, y;
 };
@@ -36,7 +39,16 @@ auto load_node (const char *filename)
     fclose(f);
     return points;
 }
-
+void output_file (const char *filename, vector<int> cur, double cur_dist)
+{
+    auto f = fopen(filename, "w");  // Open the file in write mode
+    fprintf(f, "%lf\n", cur_dist);
+    int n = cur.size();
+    for (int i = 0; i < n; ++i)
+    {
+        fprintf(f, "%d ", cur[i]);
+    }
+}
 auto get_dist_matrix (vector<point> &points)
 {
     int n = points.size();
@@ -52,7 +64,7 @@ auto get_path_dist (vector<int> &sol, vector<vector<double>> &dist_matrix)
     int n = sol.size();
     double dist = dist_matrix[sol[0]][sol[n - 1]];
     for (int i = 1; i < n; ++i)
-        dist += dist_matrix[sol[0]][sol[n - 1]];
+        dist += dist_matrix[sol[i]][sol[i - 1]];
     return dist;
 }
 
@@ -73,8 +85,8 @@ auto greedy (vector<point> &points, vector<vector<double>> &dist_matrix)
     return make_pair(sol, sol_dist);
 }
 
-
-void add_panelty(vector<vector<double>> &dist_matrix, vector<vector<int>> &panelty, vector<int> &cur)
+//#define depanel
+void add_panelty(vector<vector<double>> &dist_matrix, vector<vector<int>> &panelty, vector<int> &cur, double &cur_arg_dist, double lambda)
 {
     int n = cur.size();
     vector<int> max_util_list = {0};
@@ -95,39 +107,62 @@ void add_panelty(vector<vector<double>> &dist_matrix, vector<vector<int>> &panel
         int x = cur[dec(i, n)], y = cur[i];
         panelty[x][y]++;
         panelty[y][x]++;
+        cur_arg_dist += lambda;
+#ifdef depanel
+        printf("%d %d\n", x, y);
+#endif
     }
     return;
 }
 
+//#define debug
 auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_matrix, vector<int> cur, double cur_dist)
 {
     int n = points.size();
     double lambda = alpha * cur_dist / n;
     double cur_arg_dist = cur_dist;
     double best_dist = cur_dist;
-    auto  best_sol = cur;
+    auto best_sol = cur;
     vector<vector<int>> panelty(n, vector<int>(n, 0));
     for (int T = 0; T < MAX_ITERATION_TIMES; ++T)
     {
+#ifdef debugf
+    printf("%d %lf\n", T, cur_dist);
+#endif    
         bool flag_changed = 1;
         while (flag_changed)  // not at the local solution point
         {
             flag_changed = 0;
             for (int i = 0; i < n; ++i)
-            {
-                int t1 = cur[i], t2 = cur[inc(i, n)];
+            { 
                 for (int j = i + 1; j < n; ++j)
                 {
-                    int t3 = cur[j], t4 = cur[inc(i, n)];
+                   int t1 = cur[i], t2 = cur[inc(i, n)];
+#ifdef debugf
+    printf("%d %d\n", i, j);
+    for (int i = 0; i < n; ++i) printf("%d ", cur[i]);
+    puts("");
+#endif
+                    int t3 = cur[j], t4 = cur[inc(j, n)];
+                    if (t4 == t1 || t4 == t2 || t1 == t3) continue;
                     double dist_delta = -dist_matrix[t1][t2] - dist_matrix[t3][t4] + dist_matrix[t1][t3] + dist_matrix[t2][t4];
                     int panelty_delta = -panelty[t1][t2] - panelty[t3][t4] + panelty[t1][t3] + panelty[t2][t4];
                     double next_arg_dist = cur_dist + dist_delta + lambda * panelty_delta;
-                    if (next_arg_dist < cur_arg_dist)
+                    if (next_arg_dist + eps < cur_arg_dist)
                     {
-                        reverse(cur.begin() + i, cur.begin() + j + 1);
+                        reverse(cur.begin() + i + 1, cur.begin() + j + 1);
                         cur_arg_dist = next_arg_dist;
                         cur_dist += dist_delta;
                         flag_changed = 1;
+#ifdef debug
+    printf("%d %d\n", i, j);
+    printf("t1 ~ t4 = %d %d %d %d\n", t1, t2, t3, t4);
+    for (int i = 0; i < n; ++i) printf("%d ", cur[i]);
+    puts("");
+    printf("cur_dist = %lf  dist_delta = %lf  lambda = %lf  panelty_delta = %d\n", cur_dist, dist_delta, lambda, panelty_delta);
+    printf("get_path_dist = %lf\n", get_path_dist(cur, dist_matrix));
+    assert(abs(cur_dist - get_path_dist(cur, dist_matrix)) < eps);
+#endif
                     }
                 }
             }
@@ -137,9 +172,9 @@ auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_mat
                 best_sol = cur;
             }
         }
-        add_panelty(dist_matrix, panelty, cur);
+        add_panelty(dist_matrix, panelty, cur, cur_arg_dist, lambda);
     }
-    return make_pair(best_dist, best_sol);
+    return make_pair(best_sol, best_dist);
 }
 
 int main (int argc, char *argv[])
@@ -153,5 +188,15 @@ int main (int argc, char *argv[])
     auto dist_matrix = get_dist_matrix(points);
     auto [cur_sol, cur_sol_dist] = greedy(points, dist_matrix);
     auto [best_sol, best_sol_dist] = guided_local_search(points, dist_matrix, cur_sol, cur_sol_dist);
+    /*
+    for (C = 1; C < 20; C++)
+        for (alpha = 0.01; alpha < 0.2; alpha += 0.01)
+        {
+            auto [best_sol, best_sol_dist] = guided_local_search(points, dist_matrix, cur_sol, cur_sol_dist);
+            printf("%lf %lf %d\n", best_sol_dist, alpha, C);
+        }
+    */
+    printf("%lf\n", best_sol_dist);
+    output_file("out1.txt", best_sol, best_sol_dist);
     return 0;
 }

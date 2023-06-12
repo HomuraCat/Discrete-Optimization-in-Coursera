@@ -20,6 +20,8 @@ def plot_path(points, ans):
     x_coords.append(x_coords[0])
     y_coords.append(y_coords[0])
     plt.plot(x_coords, y_coords, 'o-')
+    for i, point_idx in enumerate(ans):
+        plt.text(points[point_idx].x, points[point_idx].y, str(point_idx), ha='center', va='bottom')
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.title('Path Plot')
@@ -173,6 +175,14 @@ def solve_tsp (points):
 
     return sol
 
+def read(filename):
+    with open(filename, "r") as file:
+        lines = file.readlines()
+    lines[1] = lines[1].split()
+    ans = []
+    for i in range(len(lines[1])):
+        ans.append(int(lines[1][i]))
+    return ans
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -193,7 +203,7 @@ def solve_it(input_data):
     # visit the nodes in the order they appear in the file
     #solution = list(range(nodeCount))
     #solution = local_search_tsp(points)
-    solution = solve_tsp(points)
+    solution = read("out.txt")
     #for i in range(10):
     #    cur_solution = solve_tsp(points)
     #    if path_dist(points, cur_solution) < path_dist(points, solution):
