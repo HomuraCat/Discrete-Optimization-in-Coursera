@@ -17,8 +17,8 @@
 using namespace std;
 const double alpha = 0.2;
 const double eps = 1e-7;
-const int MAX_ITERATION_TIMES = 5000;
-const double K = 1000;
+const int MAX_ITERATION_TIMES = 10000;
+const double K = 50;
 struct point{
     double x, y;
 };
