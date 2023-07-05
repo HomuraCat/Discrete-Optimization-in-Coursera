@@ -17,8 +17,7 @@
 using namespace std;
 const double alpha = 0.2;
 const double eps = 1e-7;
-const int MAX_ITERATION_TIMES = 10000;
-const int K = 20;
+const int MAX_ITERATION_TIMES = 100000; 
 struct point{
     double x, y;
 };
@@ -49,22 +48,7 @@ void output_file (const char *filename, vector<int> cur, double cur_dist)
     {
         fprintf(f, "%d ", cur[i]);
     }
-}
-auto get_k_neighbor (vector<point> &points)
-{
-    int n = points.size();
-    vector<vector<pair<double, int>>> dist_matrix(n, vector<pair<double, int>>(n));
-    for (int i = 0; i < n; ++i)
-        for (int j = 0; j < n; ++j)
-            dist_matrix[i][j] = make_pair(sqrt(sqr(points[i].x - points[j].x) + sqr(points[i].y - points[j].y)), j);
-    for (int i = 0; i < n; ++i)
-        sort(dist_matrix[i].begin(), dist_matrix[i].end());
-    for (int i = 0; i < n; ++i)
-    {
-        dist_matrix[i].erase(dist_matrix[i].begin() + K + 1, dist_matrix[i].end());
-        dist_matrix[i].erase(dist_matrix[i].begin(), dist_matrix[i].begin() + 1); // the first one is itself
-    }
-    return dist_matrix;
+    fclose(f);
 }
 auto get_dist_matrix (vector<point> &points)
 {
@@ -75,6 +59,7 @@ auto get_dist_matrix (vector<point> &points)
             dist_matrix[i][j] = sqrt(sqr(points[i].x - points[j].x) + sqr(points[i].y - points[j].y));
     return dist_matrix;
 }
+
 auto get_path_dist (vector<int> &sol, vector<vector<double>> &dist_matrix)
 {
     int n = sol.size();
@@ -84,32 +69,17 @@ auto get_path_dist (vector<int> &sol, vector<vector<double>> &dist_matrix)
     return dist;
 }
 
-auto greedy (vector<point> &points, vector<vector<double>> &dist_matrix, vector<vector<pair<double, int>>> &k_neighbor)
+auto greedy (vector<point> &points, vector<vector<double>> &dist_matrix)
 {
     int n = points.size();
     vector<int> sol(n);
-    vector<bool> vis(n, 0); 
     for (int i = 0; i < n; ++i) sol[i] = i;
-    vis[0] = 1;
     for (int i = 1; i < n; ++i)
     {
-        int j = -1;
-        int u = sol[i - 1];
-        /*
-        for (int k = 0; k < up_k; ++k)
-        {
-            pair<double, int> now = k_neighbor[u][k];
-            if (vis[now.second] == 1) continue;
-            j = now.second;
-            break;
-        }*/
-        if (j == -1)
-        {
-            j = i;
-            for (int k = i + 1; k < n; ++k)
-                if (dist_matrix[u][sol[k]] < dist_matrix[u][sol[j]])
-                    j = k;
-        }
+        int j = i;
+        for (int k = i + 1; k < n; ++k)
+            if (dist_matrix[sol[i - 1]][sol[k]] < dist_matrix[sol[i - 1]][sol[j]])
+                j = k;
         swap(sol[i], sol[j]);
     }
     double sol_dist = get_path_dist(sol, dist_matrix);
@@ -147,7 +117,7 @@ void add_panelty(vector<vector<double>> &dist_matrix, vector<vector<int>> &panel
 }
 
 #define debug
-auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_matrix, vector<vector<pair<double, int>>> &k_neighbor, vector<int> cur, double cur_dist)
+auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_matrix, vector<int> cur, double cur_dist)
 {
     int n = points.size();
     double lambda = alpha * cur_dist / n;
@@ -155,95 +125,46 @@ auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_mat
     double best_dist = cur_dist;
     auto best_sol = cur;
     vector<vector<int>> panelty(n, vector<int>(n, 0));
-    vector<int> pos(n);
-    for (int i = 0; i < n; ++i) pos[cur[i]] = i;
     for (int T = 0; T < MAX_ITERATION_TIMES; ++T)
     {
 #ifdef debug
-    puts("");
     printf("%d %lf %lf\n", T, cur_dist, best_dist);
-    //printf("%lf %lf", points[0].x, points[0].y);
-#endif
+#endif    
+        output_file("out6.txt", best_sol, best_dist);
         bool flag_changed = 1;
         while (flag_changed)  // not at the local solution point
         {
-            flag_changed = 0;
-            for (int i = 0; i < n; ++i)
-            {
-                if (n - i <= K)
-                {
-                    for (int j = i + 1; j < n; ++j)
-                    {
-                        int t1 = cur[i], t2 = cur[inc(i, n)];
-                        int t3 = cur[j], t4 = cur[inc(j, n)];
-                        if (t4 == t1 || t4 == t2 || t1 == t3) continue;
-                        double dist_delta = -dist_matrix[t1][t2] - dist_matrix[t3][t4] + dist_matrix[t1][t3] + dist_matrix[t2][t4];
-                        int panelty_delta = -panelty[t1][t2] - panelty[t3][t4] + panelty[t1][t3] + panelty[t2][t4];
-                        double next_arg_dist = cur_dist + dist_delta + lambda * panelty_delta;
-                        if (next_arg_dist + eps < cur_arg_dist)
-                        {
-                            reverse(cur.begin() + i + 1, cur.begin() + j + 1);
-                            cur_arg_dist = next_arg_dist;
-                            cur_dist += dist_delta;
-                            flag_changed = 1;
-                        }
-                    }
-                    continue;
-                }
-                for (int j = 0; j < K; ++j)
-                {
-                   int t1 = cur[i], t2 = cur[inc(i, n)];
 #ifdef debug
+    printf("%d %lf %lf\n", T, cur_dist, best_dist);
+#endif    
+            flag_changed = 0;
+            for (int i = 0; i < n - 1; ++i)
+            { 
+                for (int p = 1; p <= 30; ++p)
+                //for (int j = i + 1; j < n; ++j)
+                {
+                    int j = rand() % (n - i - 1) + i + 1;
+                    int t1 = cur[i], t2 = cur[inc(i, n)];
+#ifdef debugf
     printf("%d %d\n", i, j);
     for (int i = 0; i < n; ++i) printf("%d ", cur[i]);
     puts("");
-    for (int i = 0; i < n; ++i) printf("%d ", pos[i]);
-    puts("");
 #endif
-                    int t3 = k_neighbor[t1][j].second;
-                    int t4 = cur[inc(pos[t3], n)];
-#ifdef debug
-                    printf("t1 = %d t2 = %d t3 = %d t4 = %d\n", t1, t2, t3, t4);
-#endif
-                    if (t4 == t1 || t4 == t2 || t1 == t3 || t2 == t3) continue;
+                    int t3 = cur[j], t4 = cur[inc(j, n)];
+                    if (t4 == t1 || t4 == t2 || t1 == t3) continue;
                     double dist_delta = -dist_matrix[t1][t2] - dist_matrix[t3][t4] + dist_matrix[t1][t3] + dist_matrix[t2][t4];
                     int panelty_delta = -panelty[t1][t2] - panelty[t3][t4] + panelty[t1][t3] + panelty[t2][t4];
-                    double next_arg_dist = cur_dist + dist_delta + lambda * panelty_delta; 
-                    int x = inc(i, n), y = pos[t3];
-#ifdef debug
-                    printf("x = %d y = %d\n", x, y);
-#endif
-                    if (x >= y) continue;
+                    double next_arg_dist = cur_dist + dist_delta + lambda * panelty_delta;
                     if (next_arg_dist + eps < cur_arg_dist)
                     {
-                        if (x < y)
-                        {
-                            reverse(cur.begin() + x, cur.begin() + y + 1);
-                            for (int k = x; k <= y; ++k) pos[cur[k]] = k;
-                        }/*
-                        else
-                        {
-                            continue;
-                            vector<int> vec; vec.clear();
-                            for (int k = x; k < n; ++k) vec.push_back(cur[k]);
-                            for (int k = 0; k <= y; ++k) vec.push_back(cur[k]);
-                            reverse(vec.begin(), vec.end());
-                            int now = 0;
-                            for (int k = x; k < n; ++k, ++now) cur[k] = vec[now];
-                            for (int k = 0; k <= y; ++k, ++now) cur[k] = vec[now];
-                            for (int k = 0; k < n; ++k) pos[cur[k]] = k;
-                            //                        for (int k = x; k < n; ++k) pos[cur[k]] = k;
-   //                         for (int k = 0; k <= y; ++k) pos[cur[k]] = k;
-                        }*/
+                        reverse(cur.begin() + i + 1, cur.begin() + j + 1);
                         cur_arg_dist = next_arg_dist;
                         cur_dist += dist_delta;
                         flag_changed = 1;
-#ifdef debug
+#ifdef debugf
     printf("%d %d\n", i, j);
     printf("t1 ~ t4 = %d %d %d %d\n", t1, t2, t3, t4);
     for (int i = 0; i < n; ++i) printf("%d ", cur[i]);
-    puts("");
-    for (int i = 0; i < n; ++i) printf("%d ", pos[i]);
     puts("");
     printf("cur_dist = %lf  dist_delta = %lf  lambda = %lf  panelty_delta = %d\n", cur_dist, dist_delta, lambda, panelty_delta);
     printf("get_path_dist = %lf\n", get_path_dist(cur, dist_matrix));
@@ -265,17 +186,16 @@ auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_mat
 
 int main (int argc, char *argv[])
 {
+    srand(19260817);
     if (argc != 2)
     {
         printf("Example: ./tsp data/tsp_51_1\n");
         exit(-1);
     }
     auto points = load_node(argv[1]);
-    auto k_neighbor = get_k_neighbor(points);
     auto dist_matrix = get_dist_matrix(points);
-    auto [cur_sol, cur_sol_dist] = greedy(points, dist_matrix, k_neighbor);
-    auto [best_sol, best_sol_dist] = guided_local_search(points, dist_matrix, k_neighbor, cur_sol, cur_sol_dist);
-    
+    auto [cur_sol, cur_sol_dist] = greedy(points, dist_matrix);
+    auto [best_sol, best_sol_dist] = guided_local_search(points, dist_matrix, cur_sol, cur_sol_dist);
     /*
     for (C = 1; C < 20; C++)
         for (alpha = 0.01; alpha < 0.2; alpha += 0.01)
