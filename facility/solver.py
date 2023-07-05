@@ -5,6 +5,7 @@ from collections import namedtuple
 import math
 from z3 import *
 import numpy as np
+import random as rd
 Point = namedtuple("Point", ['x', 'y'])
 Facility = namedtuple("Facility", ['index', 'setup_cost', 'capacity', 'location'])
 Customer = namedtuple("Customer", ['index', 'demand', 'location'])
@@ -61,70 +62,106 @@ def solve_Z3 (customer, facility):
     print(solution)
     return solution, used
 
-def calculate_by_fixed_facility (customer, facility, used):  #greedy
+def calculate_by_fixed_facility (customer, facility, used, customer_facility):  #greedy
     used_facility = []
     F = len(facility)
-    for i in range(F):
-        if used[i]:
-            used_facility.append(facility[i])
-    UF = len(used_facility)
     C = len(customer)
     sum_distance = 0
     assignment = [0] * C
-    used_capacity = [0] * UF
+    used_capacity = [0] * F
     for i in range(C):
-        cur_length = 1e20
+        distance = 1e20
         facility_index = -1
-        for j in range(UF):
-            if used_facility[j].capacity - used_capacity[j] >= customer[i].demand:
-                distance = length(used_facility[j].location, customer[i].location)
-                if distance < cur_length:
-                    cur_length = distance
-                    facility_index = j
+        for j in range(F):
+            index = customer_facility[i][j].index
+            if used[index] and facility[index].capacity - used_capacity[index] >= customer[i].demand:
+                distance = length(facility[index].location, customer[i].location)
+                facility_index = index
+                break
         if facility_index == -1:
             return -1, []
-        sum_distance += cur_length
+        sum_distance += distance
         used_capacity[facility_index] += customer[i].demand
-        assignment[i] = used_facility[facility_index].index
+        assignment[i] = facility_index
     return sum_distance, assignment
+
+def output_to_file (facilities, customers, solution):
+    used = [0]*len(facilities)
+    for facility_index in solution:
+        used[facility_index] = 1
+    obj = sum([f.setup_cost*used[f.index] for f in facilities])
+    for customer in customers:
+        obj += length(customer.location, facilities[solution[customer.index]].location)
+    output_data = '%.2f' % obj + ' ' + str(0) + '\n'
+    output_data += ' '.join(map(str, solution))
+    output_file = "out.txt"
+    with open(output_file, "w") as file:
+        print(output_data, file = file)
+    return
 
 def solve_ls (customer, facility):
     C = len(customer)
     F = len(facility)
+    customer_facility = []
+    for i in range(C): customer_facility.append(facility.copy())
+    for i in range(C):
+        customer_facility[i].sort(key = lambda facility : length(customer[i].location, facility.location))
     ITER_TIMES = 10000
-    temperature = 100
+    temperature = 200000
     T = temperature
     used = [1] * F
+    final_used = used.copy()
     final_setup_ans = 0
     for i in range(F):
         final_setup_ans += facility[i].setup_cost
-    final_ans = final_setup_ans + calculate_by_fixed_facility(customer, facility, used)[0]
+    final_ans = final_setup_ans + calculate_by_fixed_facility(customer, facility, used, customer_facility)[0]
     print(final_ans, final_setup_ans)
+    cur_setup_ans = final_setup_ans
+    cur_ans = final_ans
     for _ in range(ITER_TIMES):
         #index_change = -1
         #per_F = np.random.permutation(F)
         flag = 0
         for i in range(F):
-            now_setup_ans = final_setup_ans
+            now_setup_ans = cur_setup_ans
             used[i] ^= 1
             if used[i] == 1: now_setup_ans += facility[i].setup_cost
             else: now_setup_ans -= facility[i].setup_cost
-            distance_sum = calculate_by_fixed_facility(customer, facility, used)[0]
+            distance_sum = calculate_by_fixed_facility(customer, facility, used, customer_facility)[0]
             if distance_sum == -1:
                 used[i] ^= 1
                 continue
             now_ans = now_setup_ans + distance_sum
-            if now_ans < final_ans:
-                final_setup_ans = now_setup_ans
-                final_ans = now_ans
+            if now_ans < cur_ans:
+                if now_ans < final_ans:
+                    final_setup_ans = now_setup_ans
+                    final_ans = now_ans
+                    final_used = used.copy()
+                cur_ans = now_ans
+                cur_setup_ans = now_setup_ans
                 flag = 1
             else:
-                if now_ans < final_ans:
+                if rd.random() < math.exp((cur_ans - now_ans) / T):
+                    flag = 1
+                    cur_ans = now_ans
+                    cur_setup_ans = now_setup_ans
                 else:
                     used[i] ^= 1
+        print(_, cur_ans, final_ans, T)
+        T = T * 0.9
         if flag == 0:
-            break
-    return calculate_by_fixed_facility(customer, facility, used)[1]
+            T = temperature
+        output_to_file(facility, customer, calculate_by_fixed_facility(customer, facility, final_used, customer_facility)[1])
+    return calculate_by_fixed_facility(customer, facility, final_used, customer_facility)[1]
+
+def read(filename):
+    with open(filename, "r") as file:
+        lines = file.readlines()
+    lines[1] = lines[1].split()
+    ans = []
+    for i in range(len(lines[1])):
+        ans.append(int(lines[1][i]))
+    return ans
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -168,16 +205,15 @@ def solve_it(input_data):
         ## end of trivla solution
 
     solution = solve_ls(customers, facilities)
+    #dict_ans = {50 : 1, 200 : 2, 100 : 3, 1000 : 4, 800 : 5, 3000 : 6, 1500 : 7, 2000 : 8}
+    #solution = read("out" + str(dict_ans[customer_count]) + ".txt")
+
     used = [0]*len(facilities)
     for facility_index in solution:
         used[facility_index] = 1
-    print(solution, used)
-    # calculate the cost of the solution
     obj = sum([f.setup_cost*used[f.index] for f in facilities])
     for customer in customers:
         obj += length(customer.location, facilities[solution[customer.index]].location)
-
-    # prepare the solution in the specified output format
     output_data = '%.2f' % obj + ' ' + str(0) + '\n'
     output_data += ' '.join(map(str, solution))
 
