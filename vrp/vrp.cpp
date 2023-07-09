@@ -89,36 +89,41 @@ auto naive_solution (vector<point> &points, vector<vector<double>> &dist_matrix,
 {
     int n = points.size();
     vector<int> sol;
-    while(1)
+    vector<vector<int>> arr(vehicle_count);
+    vector<int> cap(vehicle_count, capacity);
+    vector<bool> vis(n, 0);
+    for (int i = vehicle_count; i < n; ++i)
     {
-        sol.clear();
-        sol.push_back(0);
-        vector<int> arr; arr.clear();
-        for (int i = vehicle_count; i < n; ++i)
-            arr.push_back(i);
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(arr.begin(), arr.end(), g);
-        
-        int vehicle_id = 1;
-        int cur_d = 0;
+        int now = -1;
         for (int j = vehicle_count; j < n; ++j)
-        {
-            int i = arr[j - vehicle_count];
-            if (cur_d + points[i].d > capacity)
+            if (!vis[j] && (now == -1 || points[j].d > points[now].d))
+                now = j;
+        vis[now] = 1;
+        bool flag = 0;
+        for (int j = 0; j < vehicle_count; ++j)
+            if (cap[j] >= points[now].d)
             {
-                cur_d = 0;
-                sol.push_back(vehicle_id);
-                vehicle_id++;
+                cap[j] -= points[now].d;
+                arr[j].push_back(now);
+                flag = 1;
+                break;
             }
-            cur_d += points[i].d;
-            sol.push_back(i);
-        }
-        for (int i = vehicle_id; i < vehicle_count; ++i)
-            sol.push_back(i);
-        if (vehicle_id <= vehicle_count)
-            break;
+        if (!flag)
+            puts("ALERT!!!");
     }
+
+    sol.clear();
+        
+    for (int i = 0; i < vehicle_count; ++i)
+    {
+        sol.push_back(i);
+        int size = arr[i].size();
+        for (int j = 0; j < size; ++j)
+        {
+            sol.push_back(arr[i][j]);
+        }
+    }
+    
     //for (int i = 0; i < sol.size(); ++i) printf("%d\n", sol[i]);
     double sol_dist = get_path_dist(sol, dist_matrix);
     return make_pair(sol, sol_dist);
@@ -160,7 +165,13 @@ bool check (vector<point> &points, vector<int> cur, int vehicle_count, int capac
         if (cur_d > capacity) return false;
         if (cur[i] < vehicle_count)
             cur_d = 0;
-    }
+    }/*
+    for (int i = 1; i < n; ++i)
+    {
+        cur_d += points[cur[i]].d;
+        if (cur[i] < vehicle_count)
+            cur_d = 0;
+    }*/
     return true;
 }
 auto guided_local_search(vector<point> &points, vector<vector<double>> &dist_matrix, vector<int> cur, double cur_dist, 
